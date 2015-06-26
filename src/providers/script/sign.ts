@@ -1,39 +1,69 @@
 import * as crypto from 'crypto';
-import Promise from 'dojo-core/Promise';
+import Promise, { State } from 'dojo-core/Promise';
 import { ByteBuffer, Codec, utf8 } from 'dojo-core/encoding';
 import { Data, Key, Signer, SignFunction } from '../../crypto';
-import { hmac } from './sign';
+import { HashFunction } from './base';
+import hmac from './hmac';
+
+declare var require: Function;
 
 /**
  * A mapping of crypto algorithm names to their node equivalents
  */
 const ALGORITHMS = {
-	hmac: 'hmac'
+	hmac: hmac
 };
 
 const resolvedPromise = Promise.resolve();
 
+function loadHash(algorithm: string): Promise<HashFunction> {
+	// TODO: sanitize algorithm name
+	return new Promise((resolve, reject) => {
+		try {
+			require([ './' + algorithm ], function (hash: HashFunction) {
+				resolve(hash);
+			});
+		}
+		catch (error) {
+			reject(error);
+		}
+	});
+}
+
 /**
  * Generates a signature for a chunk of data.
+ *
+ * The algorithm parameter is currently ignored.
  */
 function sign(algorithm: string, key: Key, data: Data, codec: Codec): Promise<ByteBuffer> {
 	const hashAlgorithm = key.algorithm;
-	const hmac = crypto.createHmac(hashAlgorithm, <Buffer> key.data);
-	const encoding = getEncodingName(codec);
-	hmac.update(data, encoding);
-	return Promise.resolve(hmac.digest());
+	return loadHash(hashAlgorithm).then(function (hash) {
+		const keyData: ByteBuffer = typeof key.data === 'string' ?
+			utf8.encode(<string> key.data) : <ByteBuffer> key.data;
+		const byteData: ByteBuffer = typeof data === 'string' ?
+			codec.encode(<string> data) : <ByteBuffer> data;
+		return hmac(hash, byteData, keyData);
+	});
 }
 
 /**
  * An object that can be used to generate a signature for a stream of data.
  */
 class ScriptSigner<T extends Data> implements Signer<T> {
-	constructor(algorithm: string, key: Key, encoding: string) {
-		Object.defineProperty(this, '_sign', {
+	/**
+	 * The algorithm is currently ignored as 'hmac' is the only supported algorithm.
+	 */
+	constructor(algorithm: string, key: Key, codec: Codec) {
+		Object.defineProperty(this, '_hash', {
 			configurable: true,
-			value: crypto.createHmac(key.algorithm, <Buffer> key.data)
+			value: loadHash(key.algorithm)
 		});
-		Object.defineProperty(this, '_encoding', { value: encoding });
+		Object.defineProperty(this, '_codec', { value: codec });
+		Object.defineProperty(this, '_key', {
+			value: typeof key.data === 'string' ? utf8.encode(<string> key.data) : <ByteBuffer> key.data
+		});
+
+		Object.defineProperty(this, '_buffer', { value: [] });
 		Object.defineProperty(this, 'signature', {
 			value: new Promise((resolve, reject) => {
 				Object.defineProperty(this, '_resolve', { value: resolve });
@@ -42,42 +72,65 @@ class ScriptSigner<T extends Data> implements Signer<T> {
 		});
 	}
 
-	private _sign: crypto.Hmac;
+	private _buffer: number[];
+	private _codec: Codec;
 	private _encoding: string;
-	private _resolve: (value: any) => void;
+	private _hash: Promise<HashFunction>;
+	private _key: ByteBuffer;
 	private _reject: (reason: Error) => void;
+	private _resolve: (value: any) => void;
 
 	signature: Promise<ByteBuffer>;
 
-	abort(reason?: Error): Promise<void> {
-		if (this._sign) {
-			// Release the reference to the Hmac/Signer instance and reject the signature
-			Object.defineProperty(this, '_sign', { value: undefined });
+	abort(reason?: Error): Promise<any> {
+		if (this.signature.state === State.Rejected) {
+			return this.signature
+		}
+		else {
 			this._reject(reason);
+			return resolvedPromise;
 		}
-		return resolvedPromise;
 	}
 
-	close(): Promise<void> {
-		if (this._sign) {
-			const result = (<crypto.Hmac> this._sign).digest();
-			// Release the reference to the Hmac/Signer instance
-			Object.defineProperty(this, '_sign', { value: undefined });
-			this._resolve(result);
+	close(): Promise<any> {
+		if (this.signature.state === State.Rejected) {
+			return this.signature
 		}
-		return resolvedPromise;
+		else {
+			return this._hash.then((hash) => {
+				try {
+					this._resolve(hmac(hash, this._buffer, this._key));
+				}
+				catch (error) {
+					this._reject(error);
+				}
+			});
+		}
 	}
 
-	start(error: (error: Error) => void): Promise<void> {
-		// Nothing to do to start a signer
-		return resolvedPromise;
+	start(error: (error: Error) => void): Promise<any> {
+		if (this.signature.state === State.Rejected) {
+			return this.signature
+		}
+		else {
+			return resolvedPromise;
+		}
 	}
 
-	write(chunk: T): Promise<void> {
-		if (this._sign) {
-			// The node typing for Sign#update is incorrect -- it shares the same signature as Hash#update
-			this._sign.update.call(this._sign, chunk, this._encoding);
+	write(chunk: T): Promise<any> {
+		if (this.signature.state === State.Rejected) {
+			return this.signature;
 		}
+
+		if (typeof chunk === 'string') {
+			let chunkString: string = <any> chunk;
+			this._buffer = this._buffer.concat(this._codec.encode(chunkString));
+		}
+		else {
+			let chunkBuffer: number[] = <any> chunk;
+			this._buffer = this._buffer.concat(chunkBuffer);
+		}
+
 		return resolvedPromise;
 	}
 }
@@ -91,7 +144,7 @@ export default function getSign(algorithm: string): SignFunction {
 		return sign(algorithm, key, data, codec);
 	};
 	signFunction.create = function<T extends Data> (key: Key, codec: Codec = utf8): Signer<T> {
-		return new ScriptSigner<T>(algorithm, key, getEncodingName(codec));
+		return new ScriptSigner<T>(algorithm, key, codec);
 	};
 
 	return signFunction;

@@ -1,15 +1,18 @@
 import * as crypto from 'crypto';
-import Promise from 'dojo-core/Promise';
+import Promise, { State } from 'dojo-core/Promise';
 import { ByteBuffer, Codec, utf8 } from 'dojo-core/encoding';
 import { Data, Hasher, HashFunction } from '../../crypto';
 import { sha256 } from './sha32';
+import { HashFunction as ScriptHash } from './base';
+import sha1 from './sha1';
+import md5 from './md5';
 
 /**
- * A mapping of crypto algorithm names to their node equivalents
+ * A mapping of crypto algorithm names to implementations
  */
-const ALGORITHMS = {
-	md5: true,
-	sha1: true,
+const ALGORITHMS: { [key: string]: ScriptHash } = {
+	md5: md5,
+	sha1: sha1,
 	sha256: sha256
 };
 
@@ -18,9 +21,9 @@ const ALGORITHMS = {
  */
 function hash(algorithm: string, data: Data, codec: Codec): Promise<ByteBuffer> {
 	if (typeof data === 'string') {
-		data = codec.encode(data);
+		data = codec.encode(<string> data);
 	}
-	return Promise.resolve(ALGORITHMS[algorithm](data));
+	return Promise.resolve(ALGORITHMS[algorithm](<ByteBuffer> data));
 }
 
 // Cache a resolved Promise to return from the stream methods.
@@ -37,7 +40,7 @@ class ScriptHasher<T extends Data> implements Hasher<T> {
 		});
 		Object.defineProperty(this, '_codec', { value: codec });
 		Object.defineProperty(this, '_buffer', {
-			configurable: true,
+			writable: true,
 			value: []
 		});
 		Object.defineProperty(this, 'digest', {
@@ -49,7 +52,7 @@ class ScriptHasher<T extends Data> implements Hasher<T> {
 		});
 	}
 
-	private _buffer: ByteBuffer;
+	private _buffer: number[];
 	private _codec: Codec;
 	private _hash: (data: ByteBuffer) => ByteBuffer;
 	private _reject: (reason: Error) => void;
@@ -57,38 +60,50 @@ class ScriptHasher<T extends Data> implements Hasher<T> {
 
 	digest: Promise<ByteBuffer>;
 
-	abort(reason?: Error): Promise<void> {
-		if (this._hash) {
-			// Release the reference to the internal buffer and reject the digest
-			Object.defineProperty(this, '_buffer', { value: undefined });
-			this._reject(reason);
+	abort(reason?: Error): Promise<any> {
+		if (this.digest.state === State.Rejected) {
+			return this.digest;
 		}
+
+		// Release the reference to the internal buffer and reject the digest
+		this._buffer = undefined;
+		this._reject(reason);
 		return resolvedPromise;
 	}
 
-	close(): Promise<void> {
-		if (this._hash) {
-			this._resolve(this._hash(this._buffer));
-			// Release the reference to the buffer
-			Object.defineProperty(this, '_buffer', { value: undefined });
+	close(): Promise<any> {
+		if (this.digest.state === State.Rejected) {
+			return this.digest;
 		}
+
+		this._resolve(this._hash(this._buffer));
+		// Release the reference to the buffer
+		this._buffer = undefined;
 		return resolvedPromise;
 	}
 
-	start(error: (error: Error) => void): Promise<void> {
-		// Nothing to do to start a hash
+	start(error: (error: Error) => void): Promise<any> {
+		if (this.digest.state === State.Rejected) {
+			return this.digest;
+		}
+
 		return resolvedPromise;
 	}
 
-	write(chunk: T): Promise<void> {
-		if (this._hash) {
-			if (typeof chunk === 'string') {
-				this._buffer.push(this._codec.encode(chunk));
-			}
-			else {
-				this._buffer.push(chunk);
-			}
+	write(chunk: T): Promise<any> {
+		if (this.digest.state === State.Rejected) {
+			return this.digest;
 		}
+
+		if (typeof chunk === 'string') {
+			let chunkString: string = <any> chunk;
+			this._buffer = this._buffer.concat(this._codec.encode(chunkString));
+		}
+		else {
+			let chunkBuffer: number[] = <any> chunk;
+			this._buffer = this._buffer.concat(chunkBuffer);
+		}
+
 		return resolvedPromise;
 	}
 }
