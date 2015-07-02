@@ -20,8 +20,13 @@ function loadHash(algorithm: string): Promise<HashFunction> {
 	// TODO: sanitize algorithm name
 	return new Promise((resolve, reject) => {
 		try {
-			require([ './' + algorithm ], function (hash: HashFunction) {
-				resolve(hash);
+			require([ './' + algorithm ], function (hash: any) {
+				if (hash.default) {
+					resolve(hash.default);
+				}
+				else {
+					resolve(hash[algorithm]);
+				}
 			});
 		}
 		catch (error) {
@@ -99,6 +104,7 @@ class ScriptSigner<T extends Data> implements Signer<T> {
 		else {
 			return this._hash.then((hash) => {
 				try {
+					console.log('hashing', this._buffer);
 					this._resolve(hmac(hash, this._buffer, this._key));
 				}
 				catch (error) {
