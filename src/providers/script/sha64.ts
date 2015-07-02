@@ -1,17 +1,7 @@
 import { ByteBuffer, utf8 } from 'dojo-core/encoding';
 import Promise from 'dojo-core/Promise';
-import { HashFunction, addWords as add, bytesToWords, wordsToBytes } from './base';
+import { HashFunction, bytesToWords, wordsToBytes } from './base';
 import { Data } from '../../crypto';
-
-// the encoding functions
-function S (X: number, n: number): number { return ( X >>> n ) | (X << (32 - n)); }
-function R (X: number, n: number): number { return ( X >>> n ); }
-function Ch(x: number, y: number, z: number): number  { return ((x & y) ^ ((~x) & z)); }
-function Maj(x: number, y: number, z: number): number { return ((x & y) ^ (x & z) ^ (y & z)); }
-function Sigma0(x: number): number { return (S(x,  2) ^ S(x, 13) ^ S(x, 22)); }
-function Sigma1(x: number): number { return (S(x,  6) ^ S(x, 11) ^ S(x, 25)); }
-function Gamma0(x: number): number { return (S(x,  7) ^ S(x, 18) ^ R(x,  3)); }
-function Gamma1(x: number): number { return (S(x, 17) ^ S(x, 19) ^ R(x, 10)); }
 
 interface Int64 {
 	high: number,
@@ -20,6 +10,74 @@ interface Int64 {
 
 function int64(high: number, low: number): Int64 {
 	return { high, low }
+}
+
+/**
+ * Copies a value.
+ */
+function copy(dst: Int64, src: Int64): void {
+	dst.high = src.high;
+	dst.low = src.low;
+}
+
+/**
+ * Right-rotates a value.
+ */
+function rotateRight(dst: Int64, src: Int64, shift: number) {
+	dst.low = (src.low >>> shift) | (src.high << (32 - shift));
+	dst.high = (src.high >>> shift) | (src.low << (32 - shift));
+}
+
+/**
+ * Reverses the dwords of the source and then rotates right by shift.
+ */
+function reverseRotateRight(dst: Int64, src: Int64, shift: number) {
+	dst.low = (src.high >>> shift) | (src.low << (32 - shift));
+	dst.high = (src.low >>> shift) | (src.high << (32 - shift));
+}
+
+/**
+ * Bitwise-shifts right a 64-bit number by shift.
+ */
+function shiftRight(dst: Int64, src: Int64, shift: number) {
+	dst.low = (src.low >>> shift) | (src.high << (32 - shift));
+	dst.high = (src.high >>> shift);
+}
+
+/**
+ * Adds two 64-bit numbers
+ */
+function add(dst: Int64, x: Int64, y: Int64) {
+	var w0 = (x.low & 0xffff) + (y.low & 0xffff);
+	var w1 = (x.low >>> 16) + (y.low >>> 16) + (w0 >>> 16);
+	var w2 = (x.high & 0xffff) + (y.high & 0xffff) + (w1 >>> 16);
+	var w3 = (x.high >>> 16) + (y.high >>> 16) + (w2 >>> 16);
+	dst.low = (w0 & 0xffff) | (w1 << 16);
+	dst.high = (w2 & 0xffff) | (w3 << 16);
+}
+
+/**
+ * Adds four 64-bit numbers
+ */
+function add4(dst: Int64, a: Int64, b: Int64, c: Int64, d: Int64){
+	var w0 = (a.low & 0xffff) + (b.low & 0xffff) + (c.low & 0xffff) + (d.low & 0xffff);
+	var w1 = (a.low >>> 16) + (b.low >>> 16) + (c.low >>> 16) + (d.low >>> 16) + (w0 >>> 16);
+	var w2 = (a.high & 0xffff) + (b.high & 0xffff) + (c.high & 0xffff) + (d.high & 0xffff) + (w1 >>> 16);
+	var w3 = (a.high >>> 16) + (b.high >>> 16) + (c.high >>> 16) + (d.high >>> 16) + (w2 >>> 16);
+	dst.low = (w0 & 0xffff) | (w1 << 16);
+	dst.high = (w2 & 0xffff) | (w3 << 16);
+}
+
+/**
+ * Adds five 64-bit numbers
+ */
+function add5(dst: Int64, a: Int64, b: Int64, c: Int64, d: Int64, e: Int64) {
+	var w0 = (a.low & 0xffff) + (b.low & 0xffff) + (c.low & 0xffff) + (d.low & 0xffff) + (e.low & 0xffff);
+	var w1 = (a.low >>> 16) + (b.low >>> 16) + (c.low >>> 16) + (d.low >>> 16) + (e.low >>> 16) + (w0 >>> 16);
+	var w2 = (a.high & 0xffff) + (b.high & 0xffff) + (c.high & 0xffff) + (d.high & 0xffff) + (e.high & 0xffff) + (w1 >>> 16);
+	var w3 = (a.high >>> 16) + (b.high >>> 16) + (c.high >>> 16) + (d.high >>> 16) + (e.high >>> 16) + (w2 >>> 16);
+	dst.low = (w0 & 0xffff) | (w1 << 16);
+	dst.high = (w2 & 0xffff) | (w3 << 16);
 }
 
 // constant K array
@@ -45,89 +103,157 @@ const K = [
 	int64(0x28db77f5, 0x23047d84), int64(0x32caab7b, 0x40c72493), int64(0x3c9ebe0a, 0x15c9bebc), int64(0x431d67c4, 0x9c100d4c), 
 	int64(0x4cc5d4be, 0xcb3e42b6), int64(0x597f299c, 0xfc657e2a), int64(0x5fcb6fab, 0x3ad6faec), int64(0x6c44198c, 0x4a475817)
 ];
+
 /**
- * Calculate a hash based on 32-bit words
+ * Calculate a hash based on 64-bit words
  *
  * @param data - The data to hash
  * @param hash - The initial hash value
  */
-function sha64(bytes: ByteBuffer, hash: number[]): ByteBuffer {
+function sha64(bytes: ByteBuffer, _hash: number[]): ByteBuffer {
 	let numBits = bytes.length * 8;
 	const words = bytesToWords(bytes);
 
-	// Clone the initial hash
-	hash = hash.slice();
+	//	prep the hash
+	const hash: Int64[] = [];
+	for (let i = 0, count = _hash.length; i < count; i += 2) {
+		hash.push(int64(_hash[i], _hash[i + 1]));
+	}
+
+	//	initialize our variables
+	const T1 = int64(0,0);
+	const T2 = int64(0,0);
+	const a = int64(0,0);
+	const b = int64(0,0);
+	const c = int64(0,0);
+	const d = int64(0,0);
+	const e = int64(0,0);
+	const f = int64(0,0);
+	const g = int64(0,0);
+	const h = int64(0,0);
+	const s0 = int64(0,0);
+	const s1 = int64(0,0);
+	const Ch = int64(0,0);
+	const Maj = int64(0,0);
+	const r1 = int64(0,0);
+	const r2 = int64(0,0);
+	const r3 = int64(0,0);
+
+	const w = new Array(80);
+	for (let i = 0; i < 80; i++) {
+		w[i] = int64(0, 0);
+	}
 
 	// Pad the input
 	words[numBits >> 5] |= 0x80 << (24 - numBits % 32);
-	words[((numBits + 64 >> 9) << 4) + 15] = numBits;
+	words[((numBits + 128 >> 10) << 5) + 31] = numBits;
 
-	const w = new Array(64);
-
-	// Do the digest
 	let numWords = words.length;
-	for (let i = 0; i < numWords; i += 16) {
-		let a = hash[0];
-		let b = hash[1];
-		let c = hash[2];
-		let d = hash[3];
-		let e = hash[4];
-		let f = hash[5];
-		let g = hash[6];
-		let h = hash[7];
+	for (let i = 0; i < numWords; i += 32) {
+		copy(a, hash[0]);
+		copy(b, hash[1]);
+		copy(c, hash[2]);
+		copy(d, hash[3]);
+		copy(e, hash[4]);
+		copy(f, hash[5]);
+		copy(g, hash[6]);
+		copy(h, hash[7]);
 
-		for (let j = 0; j < 64; j++) {
-			if (j < 16){
-				w[j] = words[j + i];
-			}
-			else { 
-				w[j] = add(add(add(Gamma1(w[j - 2]), w[j - 7]), Gamma0(w[j - 15])), w[j - 16]);
-			}
-
-			const T1 = add(add(add(add(h, Sigma1(e)), Ch(e, f, g)), K[j]), w[j]);
-			const T2 = add(Sigma0(a), Maj(a, b, c));
-
-			h = g;
-			g = f;
-			f = e;
-			e = add(d, T1);
-			d = c;
-			c = b;
-			b = a;
-			a = add(T1, T2);
+		for (let j = 0; j < 16; j++) {
+			w[j].high = words[i + 2 * j];
+			w[j].low = words[i + 2 * j + 1];
 		}
 
-		hash[0] = add(a, hash[0]);
-		hash[1] = add(b, hash[1]);
-		hash[2] = add(c, hash[2]);
-		hash[3] = add(d, hash[3]);
-		hash[4] = add(e, hash[4]);
-		hash[5] = add(f, hash[5]);
-		hash[6] = add(g, hash[6]);
-		hash[7] = add(h, hash[7]);
+		for (let j = 16; j < 80; j++) {
+			//sigma1
+			rotateRight(r1, w[j - 2], 19);
+			reverseRotateRight(r2, w[j - 2], 29);
+			shiftRight(r3, w[j - 2], 6);
+			s1.low = r1.low ^ r2.low ^ r3.low;
+			s1.high = r1.high ^ r2.high ^ r3.high;
+
+			//sigma0
+			rotateRight(r1, w[j - 15], 1);
+			rotateRight(r2, w[j - 15], 8);
+			shiftRight(r3, w[j - 15], 7);
+			s0.low = r1.low ^ r2.low ^ r3.low;
+			s0.high = r1.high ^ r2.high ^ r3.high;
+
+			add4(w[j], s1, w[j - 7], s0, w[j - 16]);
+		}
+
+		for (let j = 0; j < 80; j++) {
+			//Ch
+			Ch.low = (e.low & f.low) ^ (~e.low & g.low);
+			Ch.high = (e.high & f.high) ^ (~e.high & g.high);
+
+			//Sigma1
+			rotateRight(r1, e, 14);
+			rotateRight(r2, e, 18);
+			reverseRotateRight(r3, e, 9);
+			s1.low = r1.low ^ r2.low ^ r3.low;
+			s1.high = r1.high ^ r2.high ^ r3.high;
+
+			//Sigma0
+			rotateRight(r1, a, 28);
+			reverseRotateRight(r2, a, 2);
+			reverseRotateRight(r3, a, 7);
+			s0.low = r1.low ^ r2.low ^ r3.low;
+			s0.high = r1.high ^ r2.high ^ r3.high;
+
+			//Maj
+			Maj.low = (a.low & b.low) ^ (a.low & c.low) ^ (b.low & c.low);
+			Maj.high = (a.high & b.high) ^ (a.high & c.high) ^ (b.high & c.high);
+
+			add5(T1, h, s1, Ch, K[j], w[j]);
+			add(T2, s0, Maj);
+
+			copy(h, g);
+			copy(g, f);
+			copy(f, e);
+			add(e, d, T1);
+			copy(d, c);
+			copy(c, b);
+			copy(b, a);
+			add(a, T1, T2);
+		}
+
+		add(hash[0], hash[0], a);
+		add(hash[1], hash[1], b);
+		add(hash[2], hash[2], c);
+		add(hash[3], hash[3], d);
+		add(hash[4], hash[4], e);
+		add(hash[5], hash[5], f);
+		add(hash[6], hash[6], g);
+		add(hash[7], hash[7], h);
 	}
 
-	return wordsToBytes(hash);
-}
-
-const HASH_224: number[] = [
-	0xc1059ed8, 0x367cd507, 0x3070dd17, 0xf70e5939,
-	0xffc00b31, 0x68581511, 0x64f98fa7, 0xbefa4fa4
-];
-const sha224 = <HashFunction> function (data: ByteBuffer): ByteBuffer {
-	var hash = sha32(data, HASH_224);
-	return hash.slice(0, hash.length - 2);
+	//	convert the final hash back to 32 - bit words
+	var ret: number[] = [];
+	for (var i = 0, count = hash.length; i < count; i++) {
+		ret[i * 2] = hash[i].high;
+		ret[i * 2 + 1] = hash[i].low;
+	}
+	return wordsToBytes(ret);
 };
-sha224.blockSize = 512;
-export { sha224 };
 
-const HASH_256: number[] = [
-	0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-	0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+const HASH_384 = [
+	0xcbbb9d5d, 0xc1059ed8, 0x629a292a, 0x367cd507, 0x9159015a, 0x3070dd17, 0x152fecd8, 0xf70e5939,
+	0x67332667, 0xffc00b31, 0x8eb44a87, 0x68581511, 0xdb0c2e0d, 0x64f98fa7, 0x47b5481d, 0xbefa4fa4
 ];
-const sha256 = <HashFunction> function (data: ByteBuffer): ByteBuffer {
-	return sha32(data, HASH_256);
-}
-sha256.blockSize = 512;
-export { sha256 };
+const sha384 = <HashFunction> function (data: ByteBuffer): ByteBuffer {
+	var hash = sha64(data, HASH_384);
+	return hash.slice(0, hash.length - 16);
+};
+sha384.blockSize = 1024;
+export { sha384 };
 
+const HASH_512: number[] = [
+	0x6a09e667, 0xf3bcc908, 0xbb67ae85, 0x84caa73b, 0x3c6ef372, 0xfe94f82b, 0xa54ff53a, 0x5f1d36f1,
+	0x510e527f, 0xade682d1, 0x9b05688c, 0x2b3e6c1f, 0x1f83d9ab, 0xfb41bd6b, 0x5be0cd19, 0x137e2179
+];
+const sha512 = <HashFunction> function (data: ByteBuffer): ByteBuffer {
+	return sha64(data, HASH_512);
+}
+sha512.blockSize = 1024;
+export { sha512 };

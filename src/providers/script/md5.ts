@@ -9,7 +9,7 @@
  * Original Dojo port by Tom Trenka
  */
 
-import { HashFunction, MathFunction, addWords, bytesToWords, wordsToBytes } from './base';
+import { Endian, HashFunction, MathFunction, addWords, bytesToWords, wordsToBytes } from './base';
 import { ByteBuffer } from 'dojo-core/encoding';
 
 //	MD5 rounds functions
@@ -37,7 +37,7 @@ const II: MathFunction = function (a, b, c, d, x, s, t) {
  */
 const md5 = <HashFunction> function (bytes: ByteBuffer): ByteBuffer {
 	const numBits = bytes.length * 8;
-	const words = bytesToWords(bytes);
+	const words = bytesToWords(bytes, Endian.Little);
 
 	// Pad input
     words[numBits >> 5] |= 0x80 << (numBits % 32);
@@ -129,7 +129,7 @@ const md5 = <HashFunction> function (bytes: ByteBuffer): ByteBuffer {
 		d = addWords(d, oldd);
 	}
 
-	return wordsToBytes([ a, b, c, d ]);
+	return wordsToBytes([ a, b, c, d ], Endian.Little);
 }
 md5.blockSize = 512;
 

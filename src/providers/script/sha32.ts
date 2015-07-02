@@ -96,7 +96,7 @@ const HASH_224: number[] = [
 ];
 const sha224 = <HashFunction> function (data: ByteBuffer): ByteBuffer {
 	var hash = sha32(data, HASH_224);
-	return hash.slice(0, hash.length - 2);
+	return hash.slice(0, hash.length - 4);
 };
 sha224.blockSize = 512;
 export { sha224 };

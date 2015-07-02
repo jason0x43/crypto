@@ -38,10 +38,10 @@ export function bytesToWords(bytes: ByteBuffer, endian = Endian.Big): number[] {
 	const numWords = Math.ceil(bytes.length / 4);
 	const words = new Array(numWords);
 
-	const s0 = (24 * endian) -  0;
-	const s1 = (24 * endian) -  8;
-	const s2 = (24 * endian) - 16;
-	const s3 = (24 * endian) - 24;
+	const s0 =  0 + 24 * endian;
+	const s1 =  8 +  8 * endian;
+	const s2 = 16 -  8 * endian;
+	const s3 = 24 - 24 * endian;
 
 	for (let i = 0; i < numWords; i++) {
 		const j = 4 * i;
@@ -62,14 +62,14 @@ export function bytesToDoublewords(bytes: number[], endian = Endian.Big): number
 	const numWords = bytes.length / 8;
 	const words = new Array(numWords);
 
-	const s0 = (56 * endian) -  0;
-	const s1 = (56 * endian) -  8;
-	const s2 = (56 * endian) - 16;
-	const s3 = (56 * endian) - 24;
-	const s4 = (56 * endian) - 32;
-	const s5 = (56 * endian) - 40;
-	const s6 = (56 * endian) - 48;
-	const s7 = (56 * endian) - 56;
+	const s0 =  0 + 56 * endian;
+	const s1 =  8 + 40 * endian;
+	const s2 = 16 + 24 * endian;
+	const s3 = 24 +  8 * endian;
+	const s4 = 32 -  8 * endian;
+	const s5 = 40 - 24 * endian;
+	const s6 = 48 - 40 * endian;
+	const s7 = 56 - 56 * endian;
 
 	for (let i = 0; i < numWords; i++) {
 		const j = 4 * i;
@@ -94,10 +94,10 @@ export function wordsToBytes(words: number[], endian = Endian.Big): number[] {
 	const numWords = words.length;
 	const bytes = new Array(numWords * 4);
 
-	const s0 = (24 * endian) -  0;
-	const s1 = (24 * endian) -  8;
-	const s2 = (24 * endian) - 16;
-	const s3 = (24 * endian) - 24;
+	const s0 =  0 + 24 * endian;
+	const s1 =  8 +  8 * endian;
+	const s2 = 16 -  8 * endian;
+	const s3 = 24 - 24 * endian;
 
 	for (let i = 0; i < numWords; i++) {
 		const word = words[i];
@@ -118,14 +118,14 @@ export function doublewordsToBytes(words: number[], endian = Endian.Big): number
 	const numWords = words.length;
 	const bytes = new Array(numWords * 8);
 
-	const s0 = (56 * endian) -  0;
-	const s1 = (56 * endian) -  8;
-	const s2 = (56 * endian) - 16;
-	const s3 = (56 * endian) - 24;
-	const s4 = (56 * endian) - 32;
-	const s5 = (56 * endian) - 40;
-	const s6 = (56 * endian) - 48;
-	const s7 = (56 * endian) - 56;
+	const s0 =  0 + 56 * endian;
+	const s1 =  8 + 40 * endian;
+	const s2 = 16 + 24 * endian;
+	const s3 = 24 +  8 * endian;
+	const s4 = 32 -  8 * endian;
+	const s5 = 40 - 24 * endian;
+	const s6 = 48 - 40 * endian;
+	const s7 = 56 - 56 * endian;
 
 	for (let i = 0; i < numWords; i++) {
 		const word = words[i];

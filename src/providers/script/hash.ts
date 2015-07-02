@@ -2,7 +2,8 @@ import * as crypto from 'crypto';
 import Promise, { State } from 'dojo-core/Promise';
 import { ByteBuffer, Codec, utf8 } from 'dojo-core/encoding';
 import { Data, Hasher, HashFunction } from '../../crypto';
-import { sha256 } from './sha32';
+import { sha224, sha256 } from './sha32';
+import { sha384, sha512 } from './sha64';
 import { HashFunction as ScriptHash } from './base';
 import sha1 from './sha1';
 import md5 from './md5';
@@ -13,7 +14,10 @@ import md5 from './md5';
 const ALGORITHMS: { [key: string]: ScriptHash } = {
 	md5: md5,
 	sha1: sha1,
-	sha256: sha256
+	sha224: sha224,
+	sha256: sha256,
+	sha384: sha384,
+	sha512: sha512
 };
 
 /**

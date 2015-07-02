@@ -1,2 +1,2 @@
 import './hash';
-import './sign';
+// import './sign';
