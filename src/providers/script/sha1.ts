@@ -12,9 +12,7 @@
 import { ByteBuffer } from 'dojo-core/encoding';
 import { HashFunction, MathFunction, addWords, bytesToWords, wordsToBytes } from './base';
 
-const MASK = 0xFF;
-
-const R: MathFunction = function (n, c) {
+const S: MathFunction = function (n, c) {
 	return (n << c) | (n >>> (32 - c));
 }
 const FT: MathFunction = function (t, b, c, d) {
@@ -42,11 +40,13 @@ const sha1 = <HashFunction> function (bytes: ByteBuffer): ByteBuffer {
 	words[((numBits + 64 >> 9) << 4) + 15] = numBits;
 
 	const w = new Array(80);
-	let a =  1732584193;
-	let b = -271733879;
-	let c = -1732584194;
-	let d =  271733878;
-	let e = -1009589776;
+
+	// Initialize state
+	let a = 0x67452301;
+	let b = 0xEFCDAB89;
+	let c = 0x98BADCFE;
+	let d = 0x10325476;
+	let e = 0xC3D2E1F0;
 
 	const numWords = words.length;
 	for (let i = 0; i < numWords; i += 16) {
@@ -56,20 +56,20 @@ const sha1 = <HashFunction> function (bytes: ByteBuffer): ByteBuffer {
 		const oldd = d;
 		const olde = e;
 
-		for (let j = 0; j < 80; j++) {
-			if (j < 16) {
-				w[j] = words[i + j];
+		for (let t = 0; t < 80; t++) {
+			if (t < 16) {
+				w[t] = words[i + t];
 			}
 			else {
-				w[j] = R(w[j - 3] ^ w[j - 8] ^ w[j - 14] ^ w[j - 16], 1);
+				w[t] = S(w[t - 3] ^ w[t - 8] ^ w[t - 14] ^ w[t - 16], 1);
 			}
 
-			const t = addWords(addWords(R(a, 5), FT(j, b, c, d)), addWords(addWords(e, w[j]), KT(j)));
+			const temp = addWords(S(a, 5), FT(t, b, c, d), e, w[t], KT(t));
 			e = d; 
 			d = c;
-			c = R(b, 30);
+			c = S(b, 30);
 			b = a;
-			a = t;
+			a = temp;
 		}
 
 		a = addWords(a, olda);

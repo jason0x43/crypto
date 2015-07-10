@@ -3,105 +3,128 @@ import Promise from 'dojo-core/Promise';
 import { HashFunction, bytesToWords, wordsToBytes } from './base';
 import { Data } from '../../crypto';
 
-interface Int64 {
-	high: number,
-	low: number
-}
+/**
+ * A 64-bit integer as [ low byte, high byte ]
+ */
+type Int64 = number[];
 
+/**
+ * Create a 64-bit integer from two 32-bit values
+ */
 function int64(high: number, low: number): Int64 {
-	return { high, low }
+	return [ low, high ];
 }
 
 /**
  * Copies a value.
  */
 function copy(dst: Int64, src: Int64): void {
-	dst.high = src.high;
-	dst.low = src.low;
+	dst[0] = src[0];
+	dst[1] = src[1];
 }
 
 /**
  * Right-rotates a value.
  */
 function rotateRight(dst: Int64, src: Int64, shift: number) {
-	dst.low = (src.low >>> shift) | (src.high << (32 - shift));
-	dst.high = (src.high >>> shift) | (src.low << (32 - shift));
+	dst[0] = (src[0] >>> shift) | (src[1] << (32 - shift));
+	dst[1] = (src[1] >>> shift) | (src[0] << (32 - shift));
 }
 
 /**
  * Reverses the dwords of the source and then rotates right by shift.
  */
 function reverseRotateRight(dst: Int64, src: Int64, shift: number) {
-	dst.low = (src.high >>> shift) | (src.low << (32 - shift));
-	dst.high = (src.low >>> shift) | (src.high << (32 - shift));
+	dst[0] = (src[1] >>> shift) | (src[0] << (32 - shift));
+	dst[1] = (src[0] >>> shift) | (src[1] << (32 - shift));
 }
 
 /**
  * Bitwise-shifts right a 64-bit number by shift.
  */
 function shiftRight(dst: Int64, src: Int64, shift: number) {
-	dst.low = (src.low >>> shift) | (src.high << (32 - shift));
-	dst.high = (src.high >>> shift);
+	dst[0] = (src[0] >>> shift) | (src[1] << (32 - shift));
+	dst[1] = (src[1] >>> shift);
 }
 
 /**
  * Adds two 64-bit numbers
  */
 function add(dst: Int64, x: Int64, y: Int64) {
-	var w0 = (x.low & 0xffff) + (y.low & 0xffff);
-	var w1 = (x.low >>> 16) + (y.low >>> 16) + (w0 >>> 16);
-	var w2 = (x.high & 0xffff) + (y.high & 0xffff) + (w1 >>> 16);
-	var w3 = (x.high >>> 16) + (y.high >>> 16) + (w2 >>> 16);
-	dst.low = (w0 & 0xffff) | (w1 << 16);
-	dst.high = (w2 & 0xffff) | (w3 << 16);
+	const w0 = (x[0] & 0xFFFF) + (y[0] & 0xFFFF);
+	const w1 = (x[0] >>> 16) + (y[0] >>> 16) + (w0 >>> 16);
+	const w2 = (x[1] & 0xFFFF) + (y[1] & 0xFFFF) + (w1 >>> 16);
+	const w3 = (x[1] >>> 16) + (y[1] >>> 16) + (w2 >>> 16);
+	dst[0] = (w0 & 0xFFFF) | (w1 << 16);
+	dst[1] = (w2 & 0xFFFF) | (w3 << 16);
 }
 
 /**
  * Adds four 64-bit numbers
  */
 function add4(dst: Int64, a: Int64, b: Int64, c: Int64, d: Int64){
-	var w0 = (a.low & 0xffff) + (b.low & 0xffff) + (c.low & 0xffff) + (d.low & 0xffff);
-	var w1 = (a.low >>> 16) + (b.low >>> 16) + (c.low >>> 16) + (d.low >>> 16) + (w0 >>> 16);
-	var w2 = (a.high & 0xffff) + (b.high & 0xffff) + (c.high & 0xffff) + (d.high & 0xffff) + (w1 >>> 16);
-	var w3 = (a.high >>> 16) + (b.high >>> 16) + (c.high >>> 16) + (d.high >>> 16) + (w2 >>> 16);
-	dst.low = (w0 & 0xffff) | (w1 << 16);
-	dst.high = (w2 & 0xffff) | (w3 << 16);
+	const w0 = (a[0] & 0xFFFF) + (b[0] & 0xFFFF) + (c[0] & 0xFFFF) + (d[0] & 0xFFFF);
+	const w1 = (a[0] >>> 16) + (b[0] >>> 16) + (c[0] >>> 16) + (d[0] >>> 16) + (w0 >>> 16);
+	const w2 = (a[1] & 0xFFFF) + (b[1] & 0xFFFF) + (c[1] & 0xFFFF) + (d[1] & 0xFFFF) + (w1 >>> 16);
+	const w3 = (a[1] >>> 16) + (b[1] >>> 16) + (c[1] >>> 16) + (d[1] >>> 16) + (w2 >>> 16);
+	dst[0] = (w0 & 0xFFFF) | (w1 << 16);
+	dst[1] = (w2 & 0xFFFF) | (w3 << 16);
 }
 
 /**
  * Adds five 64-bit numbers
  */
 function add5(dst: Int64, a: Int64, b: Int64, c: Int64, d: Int64, e: Int64) {
-	var w0 = (a.low & 0xffff) + (b.low & 0xffff) + (c.low & 0xffff) + (d.low & 0xffff) + (e.low & 0xffff);
-	var w1 = (a.low >>> 16) + (b.low >>> 16) + (c.low >>> 16) + (d.low >>> 16) + (e.low >>> 16) + (w0 >>> 16);
-	var w2 = (a.high & 0xffff) + (b.high & 0xffff) + (c.high & 0xffff) + (d.high & 0xffff) + (e.high & 0xffff) + (w1 >>> 16);
-	var w3 = (a.high >>> 16) + (b.high >>> 16) + (c.high >>> 16) + (d.high >>> 16) + (e.high >>> 16) + (w2 >>> 16);
-	dst.low = (w0 & 0xffff) | (w1 << 16);
-	dst.high = (w2 & 0xffff) | (w3 << 16);
+	const w0 = (a[0] & 0xFFFF) + (b[0] & 0xFFFF) + (c[0] & 0xFFFF) + (d[0] & 0xFFFF) + (e[0] & 0xFFFF);
+	const w1 = (a[0] >>> 16) + (b[0] >>> 16) + (c[0] >>> 16) + (d[0] >>> 16) + (e[0] >>> 16) + (w0 >>> 16);
+	const w2 = (a[1] & 0xFFFF) + (b[1] & 0xFFFF) + (c[1] & 0xFFFF) + (d[1] & 0xFFFF) + (e[1] & 0xFFFF) + (w1 >>> 16);
+	const w3 = (a[1] >>> 16) + (b[1] >>> 16) + (c[1] >>> 16) + (d[1] >>> 16) + (e[1] >>> 16) + (w2 >>> 16);
+	dst[0] = (w0 & 0xFFFF) | (w1 << 16);
+	dst[1] = (w2 & 0xFFFF) | (w3 << 16);
 }
 
 // constant K array
 const K = [
-	int64(0x428a2f98, 0xd728ae22), int64(0x71374491, 0x23ef65cd), int64(0xb5c0fbcf, 0xec4d3b2f), int64(0xe9b5dba5, 0x8189dbbc), 
-	int64(0x3956c25b, 0xf348b538), int64(0x59f111f1, 0xb605d019), int64(0x923f82a4, 0xaf194f9b), int64(0xab1c5ed5, 0xda6d8118), 
-	int64(0xd807aa98, 0xa3030242), int64(0x12835b01, 0x45706fbe), int64(0x243185be, 0x4ee4b28c), int64(0x550c7dc3, 0xd5ffb4e2), 
-	int64(0x72be5d74, 0xf27b896f), int64(0x80deb1fe, 0x3b1696b1), int64(0x9bdc06a7, 0x25c71235), int64(0xc19bf174, 0xcf692694), 
-	int64(0xe49b69c1, 0x9ef14ad2), int64(0xefbe4786, 0x384f25e3), int64(0x0fc19dc6, 0x8b8cd5b5), int64(0x240ca1cc, 0x77ac9c65), 
-	int64(0x2de92c6f, 0x592b0275), int64(0x4a7484aa, 0x6ea6e483), int64(0x5cb0a9dc, 0xbd41fbd4), int64(0x76f988da, 0x831153b5), 
-	int64(0x983e5152, 0xee66dfab), int64(0xa831c66d, 0x2db43210), int64(0xb00327c8, 0x98fb213f), int64(0xbf597fc7, 0xbeef0ee4), 
-	int64(0xc6e00bf3, 0x3da88fc2), int64(0xd5a79147, 0x930aa725), int64(0x06ca6351, 0xe003826f), int64(0x14292967, 0x0a0e6e70), 
-	int64(0x27b70a85, 0x46d22ffc), int64(0x2e1b2138, 0x5c26c926), int64(0x4d2c6dfc, 0x5ac42aed), int64(0x53380d13, 0x9d95b3df), 
-	int64(0x650a7354, 0x8baf63de), int64(0x766a0abb, 0x3c77b2a8), int64(0x81c2c92e, 0x47edaee6), int64(0x92722c85, 0x1482353b), 
-	int64(0xa2bfe8a1, 0x4cf10364), int64(0xa81a664b, 0xbc423001), int64(0xc24b8b70, 0xd0f89791), int64(0xc76c51a3, 0x0654be30), 
-	int64(0xd192e819, 0xd6ef5218), int64(0xd6990624, 0x5565a910), int64(0xf40e3585, 0x5771202a), int64(0x106aa070, 0x32bbd1b8), 
-	int64(0x19a4c116, 0xb8d2d0c8), int64(0x1e376c08, 0x5141ab53), int64(0x2748774c, 0xdf8eeb99), int64(0x34b0bcb5, 0xe19b48a8), 
-	int64(0x391c0cb3, 0xc5c95a63), int64(0x4ed8aa4a, 0xe3418acb), int64(0x5b9cca4f, 0x7763e373), int64(0x682e6ff3, 0xd6b2b8a3), 
-	int64(0x748f82ee, 0x5defb2fc), int64(0x78a5636f, 0x43172f60), int64(0x84c87814, 0xa1f0ab72), int64(0x8cc70208, 0x1a6439ec), 
-	int64(0x90befffa, 0x23631e28), int64(0xa4506ceb, 0xde82bde9), int64(0xbef9a3f7, 0xb2c67915), int64(0xc67178f2, 0xe372532b), 
-	int64(0xca273ece, 0xea26619c), int64(0xd186b8c7, 0x21c0c207), int64(0xeada7dd6, 0xcde0eb1e), int64(0xf57d4f7f, 0xee6ed178), 
-	int64(0x06f067aa, 0x72176fba), int64(0x0a637dc5, 0xa2c898a6), int64(0x113f9804, 0xbef90dae), int64(0x1b710b35, 0x131c471b), 
-	int64(0x28db77f5, 0x23047d84), int64(0x32caab7b, 0x40c72493), int64(0x3c9ebe0a, 0x15c9bebc), int64(0x431d67c4, 0x9c100d4c), 
-	int64(0x4cc5d4be, 0xcb3e42b6), int64(0x597f299c, 0xfc657e2a), int64(0x5fcb6fab, 0x3ad6faec), int64(0x6c44198c, 0x4a475817)
+	int64(0x428A2F98, 0xD728AE22), int64(0x71374491, 0x23EF65CD),
+	int64(0xB5C0FBCF, 0xEC4D3B2F), int64(0xE9B5DBA5, 0x8189DBBC), 
+	int64(0x3956C25B, 0xF348B538), int64(0x59F111F1, 0xB605D019),
+	int64(0x923F82A4, 0xAF194F9B), int64(0xAB1C5ED5, 0xDA6D8118), 
+	int64(0xD807AA98, 0xA3030242), int64(0x12835B01, 0x45706FBE),
+	int64(0x243185BE, 0x4EE4B28C), int64(0x550C7DC3, 0xD5FFB4E2), 
+	int64(0x72BE5D74, 0xF27B896F), int64(0x80DEB1FE, 0x3B1696B1),
+	int64(0x9BDC06A7, 0x25C71235), int64(0xC19BF174, 0xCF692694), 
+	int64(0xE49B69C1, 0x9EF14AD2), int64(0xEFBE4786, 0x384F25E3),
+	int64(0x0FC19DC6, 0x8B8CD5B5), int64(0x240CA1CC, 0x77AC9C65), 
+	int64(0x2DE92C6F, 0x592B0275), int64(0x4A7484AA, 0x6EA6E483),
+	int64(0x5CB0A9DC, 0xBD41FBD4), int64(0x76F988DA, 0x831153B5), 
+	int64(0x983E5152, 0xEE66DFAB), int64(0xA831C66D, 0x2DB43210),
+	int64(0xB00327C8, 0x98FB213F), int64(0xBF597FC7, 0xBEEF0EE4), 
+	int64(0xC6E00BF3, 0x3DA88FC2), int64(0xD5A79147, 0x930AA725),
+	int64(0x06CA6351, 0xE003826F), int64(0x14292967, 0x0A0E6E70), 
+	int64(0x27B70A85, 0x46D22FFC), int64(0x2E1B2138, 0x5C26C926),
+	int64(0x4D2C6DFC, 0x5AC42AED), int64(0x53380D13, 0x9D95B3DF), 
+	int64(0x650A7354, 0x8BAF63DE), int64(0x766A0ABB, 0x3C77B2A8),
+	int64(0x81C2C92E, 0x47EDAEE6), int64(0x92722C85, 0x1482353B), 
+	int64(0xA2BFE8A1, 0x4CF10364), int64(0xA81A664B, 0xBC423001),
+	int64(0xC24B8B70, 0xD0F89791), int64(0xC76C51A3, 0x0654BE30), 
+	int64(0xD192E819, 0xD6EF5218), int64(0xD6990624, 0x5565A910),
+	int64(0xF40E3585, 0x5771202A), int64(0x106AA070, 0x32BBD1B8), 
+	int64(0x19A4C116, 0xB8D2D0C8), int64(0x1E376C08, 0x5141AB53),
+	int64(0x2748774C, 0xDF8EEB99), int64(0x34B0BCB5, 0xE19B48A8), 
+	int64(0x391C0CB3, 0xC5C95A63), int64(0x4ED8AA4A, 0xE3418ACB),
+	int64(0x5B9CCA4F, 0x7763E373), int64(0x682E6FF3, 0xD6B2B8A3), 
+	int64(0x748F82EE, 0x5DEFB2FC), int64(0x78A5636F, 0x43172F60),
+	int64(0x84C87814, 0xA1F0AB72), int64(0x8CC70208, 0x1A6439EC), 
+	int64(0x90BEFFFA, 0x23631E28), int64(0xA4506CEB, 0xDE82BDE9),
+	int64(0xBEF9A3F7, 0xB2C67915), int64(0xC67178F2, 0xE372532B), 
+	int64(0xCA273ECE, 0xEA26619C), int64(0xD186B8C7, 0x21C0C207),
+	int64(0xEADA7DD6, 0xCDE0EB1E), int64(0xF57D4F7F, 0xEE6ED178), 
+	int64(0x06F067AA, 0x72176FBA), int64(0x0A637DC5, 0xA2C898A6),
+	int64(0x113F9804, 0xBEF90DAE), int64(0x1B710B35, 0x131C471B), 
+	int64(0x28DB77F5, 0x23047D84), int64(0x32CAAB7B, 0x40C72493),
+	int64(0x3C9EBE0A, 0x15C9BEBC), int64(0x431D67C4, 0x9C100D4C), 
+	int64(0x4CC5D4BE, 0xCB3E42B6), int64(0x597F299C, 0xFC657E2A),
+	int64(0x5FCB6FAB, 0x3AD6FAEC), int64(0x6C44198C, 0x4A475817)
 ];
 
 /**
@@ -114,30 +137,30 @@ function sha64(bytes: ByteBuffer, _hash: number[]): ByteBuffer {
 	let numBits = bytes.length * 8;
 	const words = bytesToWords(bytes);
 
-	//	prep the hash
+	// Initialize the hash
 	const hash: Int64[] = [];
 	for (let i = 0, count = _hash.length; i < count; i += 2) {
 		hash.push(int64(_hash[i], _hash[i + 1]));
 	}
 
-	//	initialize our variables
-	const T1 = int64(0,0);
-	const T2 = int64(0,0);
-	const a = int64(0,0);
-	const b = int64(0,0);
-	const c = int64(0,0);
-	const d = int64(0,0);
-	const e = int64(0,0);
-	const f = int64(0,0);
-	const g = int64(0,0);
-	const h = int64(0,0);
-	const s0 = int64(0,0);
-	const s1 = int64(0,0);
-	const Ch = int64(0,0);
-	const Maj = int64(0,0);
-	const r1 = int64(0,0);
-	const r2 = int64(0,0);
-	const r3 = int64(0,0);
+	// Initialize state variables
+	const T1 = int64(0, 0);
+	const T2 = int64(0, 0);
+	const a = int64(0, 0);
+	const b = int64(0, 0);
+	const c = int64(0, 0);
+	const d = int64(0, 0);
+	const e = int64(0, 0);
+	const f = int64(0, 0);
+	const g = int64(0, 0);
+	const h = int64(0, 0);
+	const s0 = int64(0, 0);
+	const s1 = int64(0, 0);
+	const Ch = int64(0, 0);
+	const Maj = int64(0, 0);
+	const r1 = int64(0, 0);
+	const r2 = int64(0, 0);
+	const r3 = int64(0, 0);
 
 	const w = new Array(80);
 	for (let i = 0; i < 80; i++) {
@@ -160,50 +183,50 @@ function sha64(bytes: ByteBuffer, _hash: number[]): ByteBuffer {
 		copy(h, hash[7]);
 
 		for (let j = 0; j < 16; j++) {
-			w[j].high = words[i + 2 * j];
-			w[j].low = words[i + 2 * j + 1];
+			w[j][1] = words[i + 2 * j];
+			w[j][0] = words[i + 2 * j + 1];
 		}
 
 		for (let j = 16; j < 80; j++) {
-			//sigma1
+			// sigma1
 			rotateRight(r1, w[j - 2], 19);
 			reverseRotateRight(r2, w[j - 2], 29);
 			shiftRight(r3, w[j - 2], 6);
-			s1.low = r1.low ^ r2.low ^ r3.low;
-			s1.high = r1.high ^ r2.high ^ r3.high;
+			s1[0] = r1[0] ^ r2[0] ^ r3[0];
+			s1[1] = r1[1] ^ r2[1] ^ r3[1];
 
-			//sigma0
+			// sigma0
 			rotateRight(r1, w[j - 15], 1);
 			rotateRight(r2, w[j - 15], 8);
 			shiftRight(r3, w[j - 15], 7);
-			s0.low = r1.low ^ r2.low ^ r3.low;
-			s0.high = r1.high ^ r2.high ^ r3.high;
+			s0[0] = r1[0] ^ r2[0] ^ r3[0];
+			s0[1] = r1[1] ^ r2[1] ^ r3[1];
 
 			add4(w[j], s1, w[j - 7], s0, w[j - 16]);
 		}
 
 		for (let j = 0; j < 80; j++) {
-			//Ch
-			Ch.low = (e.low & f.low) ^ (~e.low & g.low);
-			Ch.high = (e.high & f.high) ^ (~e.high & g.high);
+			// Ch
+			Ch[0] = (e[0] & f[0]) ^ (~e[0] & g[0]);
+			Ch[1] = (e[1] & f[1]) ^ (~e[1] & g[1]);
 
-			//Sigma1
+			// Sigma1
 			rotateRight(r1, e, 14);
 			rotateRight(r2, e, 18);
 			reverseRotateRight(r3, e, 9);
-			s1.low = r1.low ^ r2.low ^ r3.low;
-			s1.high = r1.high ^ r2.high ^ r3.high;
+			s1[0] = r1[0] ^ r2[0] ^ r3[0];
+			s1[1] = r1[1] ^ r2[1] ^ r3[1];
 
-			//Sigma0
+			// Sigma0
 			rotateRight(r1, a, 28);
 			reverseRotateRight(r2, a, 2);
 			reverseRotateRight(r3, a, 7);
-			s0.low = r1.low ^ r2.low ^ r3.low;
-			s0.high = r1.high ^ r2.high ^ r3.high;
+			s0[0] = r1[0] ^ r2[0] ^ r3[0];
+			s0[1] = r1[1] ^ r2[1] ^ r3[1];
 
 			//Maj
-			Maj.low = (a.low & b.low) ^ (a.low & c.low) ^ (b.low & c.low);
-			Maj.high = (a.high & b.high) ^ (a.high & c.high) ^ (b.high & c.high);
+			Maj[0] = (a[0] & b[0]) ^ (a[0] & c[0]) ^ (b[0] & c[0]);
+			Maj[1] = (a[1] & b[1]) ^ (a[1] & c[1]) ^ (b[1] & c[1]);
 
 			add5(T1, h, s1, Ch, K[j], w[j]);
 			add(T2, s0, Maj);
@@ -228,29 +251,31 @@ function sha64(bytes: ByteBuffer, _hash: number[]): ByteBuffer {
 		add(hash[7], hash[7], h);
 	}
 
-	//	convert the final hash back to 32 - bit words
-	var ret: number[] = [];
-	for (var i = 0, count = hash.length; i < count; i++) {
-		ret[i * 2] = hash[i].high;
-		ret[i * 2 + 1] = hash[i].low;
+	//	convert the final hash back to 32-bit words
+	let ret: number[] = [];
+	const count = hash.length;
+	for (let i = 0; i < count; i++) {
+		ret[i * 2] = hash[i][1];
+		ret[i * 2 + 1] = hash[i][0];
 	}
+
 	return wordsToBytes(ret);
 };
 
 const HASH_384 = [
-	0xcbbb9d5d, 0xc1059ed8, 0x629a292a, 0x367cd507, 0x9159015a, 0x3070dd17, 0x152fecd8, 0xf70e5939,
-	0x67332667, 0xffc00b31, 0x8eb44a87, 0x68581511, 0xdb0c2e0d, 0x64f98fa7, 0x47b5481d, 0xbefa4fa4
+	0xCBBB9D5D, 0xC1059ED8, 0x629A292A, 0x367CD507, 0x9159015A, 0x3070DD17, 0x152FECD8, 0xF70E5939,
+	0x67332667, 0xFFC00B31, 0x8EB44A87, 0x68581511, 0xDB0C2E0D, 0x64F98FA7, 0x47B5481D, 0xBEFA4FA4
 ];
 const sha384 = <HashFunction> function (data: ByteBuffer): ByteBuffer {
-	var hash = sha64(data, HASH_384);
+	const hash = sha64(data, HASH_384);
 	return hash.slice(0, hash.length - 16);
 };
 sha384.blockSize = 1024;
 export { sha384 };
 
 const HASH_512: number[] = [
-	0x6a09e667, 0xf3bcc908, 0xbb67ae85, 0x84caa73b, 0x3c6ef372, 0xfe94f82b, 0xa54ff53a, 0x5f1d36f1,
-	0x510e527f, 0xade682d1, 0x9b05688c, 0x2b3e6c1f, 0x1f83d9ab, 0xfb41bd6b, 0x5be0cd19, 0x137e2179
+	0x6A09E667, 0xF3BCC908, 0xBB67AE85, 0x84CAA73B, 0x3C6EF372, 0xFE94F82B, 0xA54FF53A, 0x5F1D36F1,
+	0x510E527F, 0xADE682D1, 0x9B05688C, 0x2B3E6C1F, 0x1F83D9AB, 0xFB41BD6B, 0x5BE0CD19, 0x137E2179
 ];
 const sha512 = <HashFunction> function (data: ByteBuffer): ByteBuffer {
 	return sha64(data, HASH_512);

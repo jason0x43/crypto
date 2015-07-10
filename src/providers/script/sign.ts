@@ -5,7 +5,7 @@ import { Data, Key, Signer, SignFunction } from '../../crypto';
 import { HashFunction } from './base';
 import hmac from './hmac';
 
-declare var require: Function;
+declare const require: Function;
 
 /**
  * A mapping of crypto algorithm names to their node equivalents

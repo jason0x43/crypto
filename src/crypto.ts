@@ -31,8 +31,8 @@ import Promise from 'dojo-core/Promise';
 import { Sink } from 'dojo-core/streams/WritableStream';
 import has from './has';
 
-declare var define: { amd: any };
-declare var require: Function;
+declare const define: { amd: any };
+declare const require: Function;
 
 export type Data = string | ByteBuffer;
 

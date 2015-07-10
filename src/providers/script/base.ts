@@ -1,40 +1,53 @@
 /**
  * Notation:
  *   - A "word" is a 32-bit interger
- *   - A "doubleword" is a 64-bit integer
  */
 import { ByteBuffer } from 'dojo-core/encoding';
 
+/**
+ * A script hash function
+ */
 export interface HashFunction {
 	(data: ByteBuffer): ByteBuffer;
 	blockSize: number;
 }
 
+/**
+ * A general math function
+ */
 export interface MathFunction {
 	(...inputs: number[]): number
 }
 
 /**
- * Add a pair of words, with rollover
+ * Add a list of words, with rollover
  */
-export function addWords(a: number, b: number): number {
-	const l = (a & 0xFFFF) + (b & 0xFFFF);
-	const m = (a >> 16) + (b >> 16) + (l >> 16);
-	return (m << 16) | (l & 0xFFFF);
+export function addWords(...words: number[]): number {
+	const numWords = words.length;
+	let sum = words[0];
+	for (let i = 1; i < numWords; i++) {
+		const a = sum;
+		const b = words[i];
+		const low = (a & 0xFFFF) + (b & 0xFFFF);
+		const high = (a >> 16) + (b >> 16) + (low >> 16);
+		sum = (high << 16) | (low & 0xFFFF);
+	}
+	return sum;
 }
 
+/**
+ * Specify the endian-ness of a integer values
+ */
 export enum Endian {
 	Little = 0,
 	Big = 1
 }
 
-// TODO: The byte/word conversions should use native typed array classes if available.
-
 /**
  * Convert an array of bytes to an array of 32-bit words. Words are assumed to be encoded in little-endian format (low
  * bytes are at lower indices).
  */
-export function bytesToWords(bytes: ByteBuffer, endian = Endian.Big): number[] {
+export function bytesToWords(bytes: ByteBuffer, endian: Endian = Endian.Big): number[] {
 	const numWords = Math.ceil(bytes.length / 4);
 	const words = new Array(numWords);
 
@@ -55,42 +68,10 @@ export function bytesToWords(bytes: ByteBuffer, endian = Endian.Big): number[] {
 }
 
 /**
- * Convert an array of bytes to an array of 64-bit words. Words are assumed to be encoded in big-endian format (high
- * bytes are at lower indices).
- */
-export function bytesToDoublewords(bytes: number[], endian = Endian.Big): number[] {
-	const numWords = bytes.length / 8;
-	const words = new Array(numWords);
-
-	const s0 =  0 + 56 * endian;
-	const s1 =  8 + 40 * endian;
-	const s2 = 16 + 24 * endian;
-	const s3 = 24 +  8 * endian;
-	const s4 = 32 -  8 * endian;
-	const s5 = 40 - 24 * endian;
-	const s6 = 48 - 40 * endian;
-	const s7 = 56 - 56 * endian;
-
-	for (let i = 0; i < numWords; i++) {
-		const j = 4 * i;
-		words[i] =
-			(bytes[j]     << s0) |
-			(bytes[j + 1] << s1) |
-			(bytes[j + 2] << s2) |
-			(bytes[j + 3] << s3) |
-			(bytes[j + 4] << s4) |
-			(bytes[j + 5] << s5) |
-			(bytes[j + 6] << s6) |
-			(bytes[j + 7] << s7);
-	}
-	return words;
-}
-
-/**
  * Convert an array of 32-bit words to an array of bytes. Words are encoded in big-endian format (high bytes are at
  * lower indices).
  */
-export function wordsToBytes(words: number[], endian = Endian.Big): number[] {
+export function wordsToBytes(words: number[], endian: Endian = Endian.Big): number[] {
 	const numWords = words.length;
 	const bytes = new Array(numWords * 4);
 
@@ -106,38 +87,6 @@ export function wordsToBytes(words: number[], endian = Endian.Big): number[] {
 		bytes[j + 1] = (word >> s1) & 0x0FF;
 		bytes[j + 2] = (word >> s2) & 0x0FF;
 		bytes[j + 3] = (word >> s3) & 0x0FF;
-	}
-	return bytes;
-}
-
-/**
- * Convert an array of 64-bit words to an array of bytes. Words are encoded in big-endian format (high bytes are at
- * lower indices).
- */
-export function doublewordsToBytes(words: number[], endian = Endian.Big): number[] {
-	const numWords = words.length;
-	const bytes = new Array(numWords * 8);
-
-	const s0 =  0 + 56 * endian;
-	const s1 =  8 + 40 * endian;
-	const s2 = 16 + 24 * endian;
-	const s3 = 24 +  8 * endian;
-	const s4 = 32 -  8 * endian;
-	const s5 = 40 - 24 * endian;
-	const s6 = 48 - 40 * endian;
-	const s7 = 56 - 56 * endian;
-
-	for (let i = 0; i < numWords; i++) {
-		const word = words[i];
-		const j = 4 * i;
-		bytes[j]     = (word >> s0) & 0x0FF;
-		bytes[j + 1] = (word >> s1) & 0x0FF;
-		bytes[j + 2] = (word >> s2) & 0x0FF;
-		bytes[j + 3] = (word >> s3) & 0x0FF;
-		bytes[j + 4] = (word >> s4) & 0x0FF;
-		bytes[j + 5] = (word >> s5) & 0x0FF;
-		bytes[j + 6] = (word >> s6) & 0x0FF;
-		bytes[j + 7] = (word >> s7) & 0x0FF;
 	}
 	return bytes;
 }

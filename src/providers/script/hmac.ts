@@ -12,15 +12,14 @@ export default function hmac(hash: HashFunction, data: ByteBuffer, key: ByteBuff
 	const numBytes = Math.ceil(hash.blockSize / 32) * 4;
 	const ipad = new Array(numBytes);
 	const opad = new Array(numBytes);
-
 	for (let i = 0; i < numBytes; i++) {
 		ipad[i] = key[i] ^ 0x36;
 		opad[i] = key[i] ^ 0x5c;
 	}
 
 	// Make the final digest
-	var r1 = hash(ipad.concat(data));
-	var r2 = hash(opad.concat(r1));
+	const r1 = hash(ipad.concat(data));
+	const r2 = hash(opad.concat(r1));
 
 	return r2;
 };
