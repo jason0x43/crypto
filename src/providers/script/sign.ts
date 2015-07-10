@@ -67,8 +67,10 @@ class ScriptSigner<T extends Data> implements Signer<T> {
 		Object.defineProperty(this, '_key', {
 			value: typeof key.data === 'string' ? utf8.encode(<string> key.data) : <ByteBuffer> key.data
 		});
-
-		Object.defineProperty(this, '_buffer', { value: [] });
+		Object.defineProperty(this, '_buffer', {
+			writable: true,
+			value: []
+		});
 		Object.defineProperty(this, 'signature', {
 			value: new Promise((resolve, reject) => {
 				Object.defineProperty(this, '_resolve', { value: resolve });
@@ -104,7 +106,6 @@ class ScriptSigner<T extends Data> implements Signer<T> {
 		else {
 			return this._hash.then((hash) => {
 				try {
-					console.log('hashing', this._buffer);
 					this._resolve(hmac(hash, this._buffer, this._key));
 				}
 				catch (error) {
