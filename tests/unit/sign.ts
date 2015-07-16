@@ -19,13 +19,15 @@ function addTests(
 	let sign: crypto.SignFunction;
 
 	suite[`${provider} - ${algorithm} - ${key.algorithm}`] = {
-		direct() {
-			// clear the provider so we can try out the deferred #sign
-			setProvider(undefined);
-			sign = getSign(algorithm);
-			return sign(key, input).then(function (result) {
-				assert.deepEqual(toArray(result), expected);
-			});
+		direct: {
+			string() {
+				// clear the provider so we can try out the deferred #sign
+				setProvider(undefined);
+				sign = getSign(algorithm);
+				return sign(key, input).then(function (result) {
+					assert.deepEqual(toArray(result), expected);
+				});
+			},
 		},
 
 		encoded: {
@@ -76,6 +78,16 @@ function addTests(
 				encoded() {
 					const signer = sign.create(key, utf8);
 					signer.write(input);
+					signer.close();
+					return signer.signature.then(function (result) {
+						assert.deepEqual(toArray(result), expected);
+					});
+				},
+
+				binary() {
+					const signer = sign.create(key);
+					const binary = utf8.encode(input);
+					signer.write(binary);
 					signer.close();
 					return signer.signature.then(function (result) {
 						assert.deepEqual(toArray(result), expected);

@@ -20,6 +20,12 @@ function sign(algorithm: string, key: Key, data: Data, codec: Codec): Promise<By
 	const hashAlgorithm = key.algorithm;
 	const hmac = crypto.createHmac(hashAlgorithm, <Buffer> key.data);
 	const encoding = getEncodingName(codec);
+
+	// Node crypto requires the input data to be a string or Buffer, so convert arrays to Buffers
+	if (Array.isArray(data)) {
+		data = new Buffer(<number[]> data);
+	}
+
 	hmac.update(data, encoding);
 	return Promise.resolve(hmac.digest());
 }
@@ -75,8 +81,12 @@ class NodeSigner<T extends Data> implements Signer<T> {
 
 	write(chunk: T): Promise<void> {
 		if (this._sign) {
+			let _chunk: T | Buffer = chunk;
+			if (Array.isArray(chunk)) {
+				_chunk = new Buffer(<any> chunk);
+			}
 			// The node typing for Sign#update is incorrect -- it shares the same signature as Hash#update
-			this._sign.update.call(this._sign, chunk, this._encoding);
+			this._sign.update.call(this._sign, _chunk, this._encoding);
 		}
 		return resolvedPromise;
 	}

@@ -3,6 +3,7 @@ import assert = require('intern/chai!assert');
 import * as crypto from 'src/crypto';
 import * as script from 'src/providers/script';
 import { ascii, base64, hex, utf8 } from 'dojo-core/encoding';
+import has from 'src/has';
 
 type Suite = { [ key: string ]: any };
 type TestData = {
@@ -186,7 +187,11 @@ const testData: TestData[] = [
 	}
 ];
 
-addProviderTests(suite, 'default', crypto.setProvider.bind(crypto), crypto.getHash.bind(crypto), testData);
+// Test the default provider
+
+if (has('webcrypto') || has('host-node')) {
+	addProviderTests(suite, 'default', crypto.setProvider.bind(crypto), crypto.getHash.bind(crypto), testData);
+}
 
 // Test the script provider specifically
 
